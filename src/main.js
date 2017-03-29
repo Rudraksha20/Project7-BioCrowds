@@ -10,6 +10,18 @@ var AgentList = [];
 var GoalList = [];
 var Grids = [];
 
+//Global Simulation variables
+var start = true;
+var scene;
+var scene1 = true;
+var scene2 = false;
+
+var prob = 0.01;
+var obs_p = {
+    Obstacle_Prob: 0.01
+}
+
+
 //GRID CLASS
 var Grid = function(){
     var Grid = {};
@@ -59,6 +71,8 @@ var Agent = function(){
     
     Agent.index = undefined; //index of the grid the marker is currently in. Used for cleanup and updating markers
     
+    Agent.reached = false;
+    
     return Agent;
 };
 
@@ -71,10 +85,28 @@ function Add_Grid(x, z, size, no_of_markers, scene)
     new_G.bound1 = new THREE.Vector3(x,0,z);
     new_G.bound2 = new THREE.Vector3(x-size, 0, z-size);
     
-    for(var i = 0; i < no_of_markers; i++)
+    var rock = false
+    if(x < 15 && x > -15 && z < 15 && z > -15)
+        if(THREE.Math.randFloat(0,1) <= prob)
+            rock = true;
+      
+    if(rock !== true)
     {
-        new_G.MarkerList.push(Add_To_MarkerList(scene, x, z, size));
+        for(var i = 0; i < no_of_markers; i++)
+        {
+            new_G.MarkerList.push(Add_To_MarkerList(scene, x, z, size));
+        }
+        rock = false;
     }
+    else
+    {
+        var geometry = new THREE.BoxGeometry( 3, 1, 3 );
+        var material = new THREE.MeshBasicMaterial( {color: 0x00ffff} );
+        var cube = new THREE.Mesh( geometry, material );
+        cube.position.set(x - 5, 0.5,z-5);
+        scene.add( cube );
+        rock = false;
+    }    
     
     new_G.LookupGrids = Fetch_from_Grid_Lookup_Table(x, z); 
     
@@ -147,28 +179,59 @@ function update_Agents(speed)
 
         if(AgentList[i].geometry !== undefined)
         {
-            //debugger;
-            
-//            debugger;
+    
+            if(AgentList[i].reached !== true)
+            {
+                
             var index = get_grid_index(AgentList[i].position);
             AgentList[i].index = index;
         
             
             //LOOP FOR LOOKINGUP AND OWENING MARKERS
+//            debugger;
             for(var j = 0; j < Grids[index].LookupGrids.length; j++)
             {
 
                 for(var k = 0; k < Grids[Grids[index].LookupGrids[j]].MarkerList.length; k++)
                 {
-                    if(AgentList[i].position.distanceTo(Grids[Grids[index].LookupGrids[j]].MarkerList[k].position) <= 5.0)
+                    if(Grids[Grids[index].LookupGrids[j]].MarkerList[k].owned == false)
                     {
+                        var a_index = undefined;
+                        var min_dist = 50000000.0;
+                        for(var l = 0; l < AgentList.length; l++)
+                        {
+                            var d = AgentList[l].position.distanceTo(Grids[Grids[index].LookupGrids[j]].MarkerList[k].position);
+                            if(d < min_dist && d <= 4.0)
+                            {
+                                a_index = l;
+                                min_dist = d; 
+                                
+                            }
+                        }
                         
-                        AgentList[i].marker_pos.push(Grids[Grids[index].LookupGrids[j]].MarkerList[k].position);
-                    
-                        //change marker to owned and change its color
-                        Grids[Grids[index].LookupGrids[j]].MarkerList[k].owned = true;
-                        Grids[Grids[index].LookupGrids[j]].MarkerList[k].geometry.material.color.setHex(AgentList[i].geometry.material.color.getHex());
+                        if(a_index !== undefined)
+                        {   
+                            AgentList[a_index].marker_pos.push(Grids[Grids[index].LookupGrids[j]].MarkerList[k].position);
+                            //change marker to owned and change its color
+                            Grids[Grids[index].LookupGrids[j]].MarkerList[k].owned = true;
+                            Grids[Grids[index].LookupGrids[j]].MarkerList[k].geometry.material.color.setHex(AgentList[a_index].geometry.material.color.getHex());
+                        }
+                        
                     }
+                    
+                    
+                    
+                    
+//                    if(AgentList[i].position.distanceTo(Grids[Grids[index].LookupGrids[j]].MarkerList[k].position) <= 5.0)
+//                    {
+//                        
+//                        AgentList[i].marker_pos.push(Grids[Grids[index].LookupGrids[j]].MarkerList[k].position);
+//                    
+//                        //change marker to owned and change its color
+//                        Grids[Grids[index].LookupGrids[j]].MarkerList[k].owned = true;
+//                        Grids[Grids[index].LookupGrids[j]].MarkerList[k].geometry.material.color.setHex(AgentList[i].geometry.material.color.getHex());
+//                    }
+                
                 }
             }
             
@@ -204,6 +267,8 @@ function update_Agents(speed)
 //            AgentList[i].geometry.position.set(new_pos.x, new_pos.y, new_pos.z);
 //            AgentList[i].position = new_pos;
 //            AgentList[i].geometry.verticesNeedUpdate = true
+          
+        }
         }
     }
     //debugger;
@@ -222,8 +287,11 @@ function free_data()
                 {
                     for(var k = 0; k < Grids[Grids[AgentList[i].index].LookupGrids[j]].MarkerList.length; k++)   
                     {
-                        Grids[Grids[AgentList[i].index].LookupGrids[j]].MarkerList[k].owned = false;
-                        Grids[Grids[AgentList[i].index].LookupGrids[j]].MarkerList[k].geometry.material.color.setHex(0xffff00);
+                        if(Grids[Grids[AgentList[i].index].LookupGrids[j]].MarkerList[k].owned !== false)
+                        {
+                            Grids[Grids[AgentList[i].index].LookupGrids[j]].MarkerList[k].owned = false;
+                            Grids[Grids[AgentList[i].index].LookupGrids[j]].MarkerList[k].geometry.material.color.setHex(0xffff00);
+                        }   
                     }
                 }
             
@@ -347,7 +415,11 @@ function Add_To_AgentList(geom)
     new_agent.position = geom.position;
     
     //selecting a goal from the available goals
-    var index = select_goal();
+    if(GoalList.length == 10)
+        var index = select_goal1();
+    else
+        var index = select_goal2(geom.position.x);
+    
     new_agent.goal = GoalList[index];
     new_agent.goal.geometry.material.color.setHex(geom.material.color.getHex());
     
@@ -356,7 +428,7 @@ function Add_To_AgentList(geom)
     AgentList.push(new_agent);
 }
 
-function select_goal()
+function select_goal1()
 {
     var index = 0;
     var goal_selected = false;
@@ -371,30 +443,99 @@ function select_goal()
     }
     
     return index;
-}   
+} 
 
-//End of Misc Functions    
-
-// called after the scene loads
-function onLoad(framework) {
-  var scene = framework.scene;
-  var camera = framework.camera;
-  var renderer = framework.renderer;
-  var gui = framework.gui;
-  var stats = framework.stats;
-    var audio = framework.audio;
+function select_goal2(x)
+{
+    if(x > 0)
+    {
+        var index = 0;
+        var goal_selected = false;
+        while(goal_selected != true)
+        {
+            index = THREE.Math.randInt(0, 9);
+            if(GoalList[index].selected == false)
+            {
+                goal_selected = true;
+                GoalList[index].selected = true;
+            }
+        }
     
-  // set camera position
-  camera.position.set(0, 40, 40);
-  camera.lookAt(new THREE.Vector3(0,0,0));
+        return index;        
+    }
+    else if(x < 0)
+    {
+        var index = 0;
+        var goal_selected = false;
+        while(goal_selected != true)
+        {
+            index = THREE.Math.randInt(10, 19);
+            if(GoalList[index].selected == false)
+            {
+                goal_selected = true;
+                GoalList[index].selected = true;
+            }
+        }
+    
+        return index;  
+    }
+}
 
+var st = function(){
+    this.Play_Pause = function(){
+        start = !start;
+    }
+}
+
+var rs = function(){
+    this.Reset = function(){
+        Clear_Scene();
+        if(scene1 !== false)
+            Create_Scene1();
+        else
+            Create_Scene2();
+    }
+}
+
+var rs1 =  function(){
+    this.Scene1 = function(){
+        Clear_Scene();
+        Create_Scene1();
+        scene1 = true;
+        scene2 = false;
+    }
+}
+
+var rs2 =  function(){
+    this.Scene2 = function(){
+        Clear_Scene();
+        Create_Scene2();
+        scene2 = true;
+        scene1 = false;
+    }
+}
+
+function Clear_Scene()
+{
+    while(scene.children.length > 0)
+    { 
+        scene.remove(scene.children[0]); 
+    }
+    GoalList.length = [];
+    AgentList.length = [];
+    Grids.length = [];
+    start = true;
+}
+
+function Create_Scene1()
+{
     //create a BASE PLANE
     var base_plane_geom = new THREE.PlaneGeometry(50, 50);
     var base_plane_material = new THREE.MeshBasicMaterial( {color: 0x666666, side: THREE.DoubleSide} );
     var plane = new THREE.Mesh( base_plane_geom, base_plane_material );
     base_plane_geom.rotateX(90 * 3.14 / 180);
     scene.add( plane );
-    
+   
     //Create a grid structure of Markers on the plane
     Grids.clear;
     var size = 10;
@@ -413,10 +554,10 @@ function onLoad(framework) {
     for(var j = 0 ; j < 10; j++)
     {
         GoalList.clear;
-        var goal_geometry = new THREE.CylinderGeometry( 0.5, 0.5, 20, 10 );
+        var goal_geometry = new THREE.CylinderGeometry( 0.4, 0.4, 10, 10 );
         var goal_material = new THREE.MeshBasicMaterial( {color: 0xFF0000} );
         var goal_cylinder = new THREE.Mesh( goal_geometry, goal_material );
-        var pos_g = new THREE.Vector3(-22, 10, -22 + j * 5);
+        var pos_g = new THREE.Vector3(-23, 5, -22 + j * 5);
         goal_cylinder.position.set(pos_g.x, pos_g.y, pos_g.z);
         Add_To_GoalList(goal_cylinder);
         scene.add(goal_cylinder);       
@@ -429,17 +570,136 @@ function onLoad(framework) {
         var cyl_geometry = new THREE.CylinderGeometry( 0, .5, 2, 10 );
         var cyl_material = new THREE.MeshBasicMaterial( {color: getRandomColor()} );
         var cylinder = new THREE.Mesh( cyl_geometry, cyl_material );
-        var pos_a = new THREE.Vector3(20, 1, -22 + k * 5);
+        var pos_a = new THREE.Vector3(23, 1, -22 + k * 5);
+        cylinder.position.set(pos_a.x, pos_a.y, pos_a.z);
+        Add_To_AgentList(cylinder);
+        scene.add(cylinder);
+    }
+}
+
+function Create_Scene2()
+{
+    //create a BASE PLANE
+    var base_plane_geom = new THREE.PlaneGeometry(50, 50);
+    var base_plane_material = new THREE.MeshBasicMaterial( {color: 0x666666, side: THREE.DoubleSide} );
+    var plane = new THREE.Mesh( base_plane_geom, base_plane_material );
+    base_plane_geom.rotateX(90 * 3.14 / 180);
+    scene.add( plane );
+   
+    //Create a grid structure of Markers on the plane
+    Grids.clear;
+    var size = 10;
+    var number_of_markers = 120;
+    
+    for(var i = 25 ; i > -25; i -= size)
+    {
+        for(var j = 25 ; j > -25; j -= size)
+        {
+            Add_Grid(i, j, size, number_of_markers, scene);
+        }
+    }
+    
+    //Create a bunch of Goals for the Agents on one side
+    for(var j = 0 ; j < 10; j++)
+    {
+        GoalList.clear;
+        var goal_geometry = new THREE.CylinderGeometry( 0.5, 0.5, 10, 10 );
+        var goal_material = new THREE.MeshBasicMaterial( {color: 0xFF0000} );
+        var goal_cylinder = new THREE.Mesh( goal_geometry, goal_material );
+        var pos_g = new THREE.Vector3(-23, 5, -22 + j * 5);
+        goal_cylinder.position.set(pos_g.x, pos_g.y, pos_g.z);
+        Add_To_GoalList(goal_cylinder);
+        scene.add(goal_cylinder);
+    }
+    
+    //Create a bunch of Goals for the Agents on other side
+    for(var j = 0 ; j < 10; j++)
+    {
+        GoalList.clear;
+        var goal_geometry = new THREE.CylinderGeometry( 0.5, 0.5, 10, 10 );
+        var goal_material = new THREE.MeshBasicMaterial( {color: 0xFF0000} );
+        var goal_cylinder = new THREE.Mesh( goal_geometry, goal_material );
+        var pos_g = new THREE.Vector3(23, 5, -22 + j * 5);
+        goal_cylinder.position.set(pos_g.x, pos_g.y, pos_g.z);
+        Add_To_GoalList(goal_cylinder);
+        scene.add(goal_cylinder);
+    }
+    
+    //Create a bunch of Agents on one side
+    for(var k = 0; k < 10; k++)
+    {
+        AgentList.clear;
+        var cyl_geometry = new THREE.CylinderGeometry( 0, .5, 2, 10 );
+        var cyl_material = new THREE.MeshBasicMaterial( {color: getRandomColor()} );
+        var cylinder = new THREE.Mesh( cyl_geometry, cyl_material );
+        var pos_a = new THREE.Vector3(23, 1, -22 + k * 5);
         cylinder.position.set(pos_a.x, pos_a.y, pos_a.z);
         Add_To_AgentList(cylinder);
         scene.add(cylinder);
     }
     
-    //Goal Markers
-    
+    //Create a bunch of Agents on the other side
+    for(var k = 0; k < 10; k++)
+    {
+        AgentList.clear;
+        var cyl_geometry = new THREE.CylinderGeometry( 0, .5, 2, 10 );
+        var cyl_material = new THREE.MeshBasicMaterial( {color: getRandomColor()} );
+        var cylinder = new THREE.Mesh( cyl_geometry, cyl_material );
+        var pos_a = new THREE.Vector3(-23, 1, -22 + k * 5);
+        cylinder.position.set(pos_a.x, pos_a.y, pos_a.z);
+        Add_To_AgentList(cylinder);
+        scene.add(cylinder);
+    }
     
 }
-  
+
+
+//End of Misc Functions    
+
+// called after the scene loads
+function onLoad(framework) {
+  scene = framework.scene;
+  var camera = framework.camera;
+  var renderer = framework.renderer;
+  var gui = framework.gui;
+  var stats = framework.stats;
+    var audio = framework.audio;
+    
+  // set camera position
+  camera.position.set(0, 40, 40);
+  camera.lookAt(new THREE.Vector3(0,0,0));
+
+    
+    //Create a Scene
+    Create_Scene1();
+    
+    //start stop button
+    var stsp = new st();
+    gui.add(stsp, 'Play_Pause').onclick;
+    
+    //reset scene button
+    var rss = new rs();
+    gui.add(rss, 'Reset').onclick;
+
+    //render scene 1
+    var rsc1 = new rs1();
+    gui.add(rsc1, "Scene1").onclick;
+    
+    //render scene 2
+    var rsc2 = new rs2();
+    gui.add(rsc2, "Scene2").onclick;
+    
+    //obstacle probality
+    gui.add(obs_p, "Obstacle_Prob", 0, 0.1).onChange(function(newVal) {
+        prob = newVal;
+        Clear_Scene();
+        if(scene1 !== false)
+            Create_Scene1();
+        else
+            Create_Scene2();
+    });
+}
+
 
 // called on frame updates
 function onUpdate(framework) {
@@ -449,9 +709,10 @@ function onUpdate(framework) {
     clock.start;
     var speed = 0.005;
     speed += clock.getDelta();
-    update_Agents(speed);
-  
     
+    if(start !== false)
+        update_Agents(speed);
+
 }
 
 // when the scene is done initializing, it will call onLoad, then on frame updates, call onUpdate
